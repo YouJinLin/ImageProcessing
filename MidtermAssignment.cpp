@@ -12,6 +12,20 @@ int blueNonZero = 0, greenNonZero = 0, redNonZero = 0;
 int channelSelector = 0; //選擇 B:1、G:2、R:3 哪一張圖層
 int bins = 1; //切割的分群數
 
+void Get_Average_and_Merge_RGB() {
+    Mat splitFrame[3], newFrame;
+    split(roiFrame, splitFrame);
+    Scalar BGR_meanValue;
+    for (int c = 0; c < 3; c++) {
+        BGR_meanValue = (int)mean(roiFrame)[c];
+        splitFrame[c].setTo(BGR_meanValue);
+    }
+    merge(splitFrame, 3, newFrame);
+    namedWindow("Merge Image", WINDOW_NORMAL);
+    imshow("Merge Image", newFrame);
+
+}
+
 vector<vector<uchar>> DataGrouping() {
     vector<uchar> vecData;
     Mat bgr[3];
@@ -177,6 +191,7 @@ void mouseCallback(int event, int x, int y, int flags, void* userdata) {
         //imshow("ROI", roiFrame);
         Split_RGB_Layer();
         onChannelChange();
+        Get_Average_and_Merge_RGB();
     }
 }
 
@@ -189,7 +204,7 @@ int main()
         cout << "Cannot open video" << endl;
         return -1;
     }
-    namedWindow("Video", WINDOW_AUTOSIZE);
+    namedWindow("Video", WINDOW_NORMAL);
     setMouseCallback("Video", mouseCallback);
     while (true) {
         cap >> frame;
