@@ -6,24 +6,67 @@ using namespace cv;
 
 bool isDrawing = false;
 bool initialChannelBar = false;
+bool save_new_video_flag = false;
 Point startPoint, endPoint;
 Mat tempFrame, roiFrame, frame, Bframe, Gframe, Rframe, selectChannelFrame;
+Rect roiRect;
 int blueNonZero = 0, greenNonZero = 0, redNonZero = 0;
 int channelSelector = 0; //選擇 B:1、G:2、R:3 哪一張圖層
 int bins = 1; //切割的分群數
 
-void Get_Average_and_Merge_RGB() {
+Mat processing_Average_and_Merge(Mat TargetFrame) {
     Mat splitFrame[3], newFrame;
-    split(roiFrame, splitFrame);
+    split(TargetFrame, splitFrame);
     Scalar BGR_meanValue;
     for (int c = 0; c < 3; c++) {
-        BGR_meanValue = (int)mean(roiFrame)[c];
+        BGR_meanValue = (int)mean(TargetFrame)[c];
         splitFrame[c].setTo(BGR_meanValue);
     }
     merge(splitFrame, 3, newFrame);
+    return newFrame;
+}
+
+void Get_Average_and_Merge_RGB() {
+    Mat newFrame = processing_Average_and_Merge(roiFrame);
     namedWindow("Merge Image", WINDOW_NORMAL);
     imshow("Merge Image", newFrame);
+    save_new_video_flag = true;
 
+}
+
+void new_video_production(string& video_path, const string& save_filename, int codec, double fps) {
+    VideoCapture tempCap(video_path);
+
+    if (!tempCap.isOpened()) {
+        cout << "Error: Unable to open the camera" << endl;
+        return;
+    }
+
+    Mat save_frame;
+    VideoWriter writer(save_filename, codec, fps, roiRect.size(), true);
+    if (!writer.isOpened()) {
+        cout << "Error: Unable to open the video file for output" << endl;
+        return;
+    }
+    int count = 0;
+    while (true) {
+        tempCap >> save_frame;
+        count += 1;
+        if (save_frame.empty()) {
+            cout << "No frame captured" << endl;
+            cout << count << endl;
+            break;
+        }
+
+        // 如果roi有效則寫入
+        if (roiRect.width > 0 && roiRect.height > 0) {
+            Mat save_roiFrame = processing_Average_and_Merge(save_frame(roiRect));
+            writer.write(save_roiFrame);
+        }
+    }
+    writer.release();
+    tempCap.release();
+    save_new_video_flag = false;
 }
 
 vector<vector<uchar>> DataGrouping() {
@@ -51,7 +94,7 @@ void updateHistogram(int, void*) {
     bins = bins + 1;
     int histHeight = 300, histWidth = 400;
     Mat histImage(histHeight, histWidth, CV_8SC3, Scalar(255, 255, 255));
-    
+
     // 計算每組數據的最大值
     vector<vector<uchar>> groupData = DataGrouping();
     int maxCount = 0;
@@ -61,7 +104,7 @@ void updateHistogram(int, void*) {
 
     //設定每組的顏色
     vector<Vec3b> colors = { Vec3b(255, 0, 0), Vec3b(0, 255, 0), Vec3b(0, 0, 255), Vec3b(255, 255, 0) };
-    
+
     //繪製直方圖
     int rangeSize = 256 / (bins == 0 ? 1 : bins);
     for (int i = 0; i < bins; i++) {
@@ -96,7 +139,7 @@ void updateHistogram(int, void*) {
             0.5,
             Scalar(0, 0, 0),
             1
-        );  
+        );
     }
     imshow("Histogram", histImage);
 }
@@ -108,7 +151,7 @@ void onHistogramChange() {
         updateHistogram(0, 0);
     }
     // 設定目前要統計的圖層
-    
+
     setTrackbarPos("Bins", "Histogram", 0);
 }
 
@@ -182,7 +225,7 @@ void mouseCallback(int event, int x, int y, int flags, void* userdata) {
         rectangle(frame, startPoint, endPoint, Scalar(0, 255, 0), 2);
         imshow("Video", frame);
 
-        Rect roiRect(
+        roiRect = Rect(
             min(startPoint.x, endPoint.x),
             min(startPoint.y, endPoint.y),
             abs(startPoint.x - endPoint.x),
@@ -212,6 +255,12 @@ int main()
             cap.set(CAP_PROP_POS_FRAMES, 0);
             continue;
         }
+
+        if (save_new_video_flag) {
+            // roi 框選完成，匯製新影片
+            new_video_production(video_path, "SkyFire-ROI.avi", VideoWriter::fourcc('M', 'J', 'P', 'G'), 30.0);
+        }
+
         putText(frame, "Blue Non-Zero: " + to_string(blueNonZero), Point(10, 30), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 0, 0), 1);
         putText(frame, "Green Non-Zero: " + to_string(greenNonZero), Point(10, 50), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 255, 0), 1);
         putText(frame, "Red Non-Zero: " + to_string(redNonZero), Point(10, 70), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 255), 1);
